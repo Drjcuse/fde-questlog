@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>FDE QuestLog</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <h1>FDE QuestLog</h1>
+  <button id="why-open" class="link" type="button">Why it's built this way</button>
+</header>
+
+<main id="app">
+  <section id="sheet" class="panel" aria-label="Character sheet"></section>
+  <section id="warmup" class="panel" aria-label="Spaced-retrieval warmup"></section>
+  <section id="intel" class="panel" aria-label="Tactical intel"></section>
+  <section id="quests" class="panel" aria-label="Today's quests"></section>
+  <section id="checkin" class="panel" aria-label="Check-in"></section>
+  <p id="load-error" class="error" hidden></p>
+</main>
+
+<aside id="why" class="drawer" hidden aria-label="Why it's built this way">
+  <div class="drawer-body">
+    <button id="why-close" class="link" type="button">Close</button>
+    <h2>Why it's built this way</h2>
+    <div id="why-rules"></div>
+  </div>
+</aside>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "owner": "Drjcuse",
+  "repo": "fde-questlog",
+  "start_date": "2026-11-27",
+  "target_date": "2026-12-17",
+  "day": 1,
+  "total_xp": 0,
+  "trees": {
+    "python": {
+      "xp": 0
+    },
+    "aws": {
+      "xp": 0
+    },
+    "wargames": {
+      "xp": 0
+    }
+  },
+  "rested_xp_active": false,
+  "rested_stack": 0,
+  "missed_days": 0,
+  "last_checkin": null,
+  "days_checked_in": 0,
+  "titles": [],
+  "aws_weak_domains": [],
+  "stuck_on": [],
+  "td_scores": [],
+  "bosses": {
+    "python": null,
+    "aws": null,
+    "wargames": null
+  },
+  "history": []
+}

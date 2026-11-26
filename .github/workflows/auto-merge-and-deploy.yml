@@ -1,0 +1,78 @@
+name: Auto-merge quest and deploy Pages
+
+# Flow:
+#   1. Nightly task pushes claude/quest-YYYY-MM-DD.
+#   2. "merge" validates the JSON, merges the branch into main, deletes it,
+#      then dispatches this same workflow on main.
+#   3. "deploy" runs on main only and publishes the repo root to GitHub Pages.
+#
+# The dispatch in step 2 is needed because a push made with GITHUB_TOKEN does
+# not start new workflow runs; workflow_dispatch is the documented exception.
+#
+# One-time repo setting:
+#   Settings > Pages > Source: "GitHub Actions"
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/quest-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: questlog-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: startsWith(github.ref, 'refs/heads/claude/quest-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate quest JSON
+        run: python3 scripts/validate_quest.py
+      - name: Merge into main
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          git merge --no-edit "origin/${BRANCH}"
+          python3 scripts/validate_quest.py
+          git push origin main
+          git push origin --delete "${BRANCH}"
+      - name: Dispatch deploy on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run auto-merge-and-deploy.yml --ref main
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate quest JSON
+        run: python3 scripts/validate_quest.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
