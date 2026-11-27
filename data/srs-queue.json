@@ -46,6 +46,16 @@
       "due_date": "2026-11-30",
       "q": "json.loads(\"{'a': 1}\") - what happens, and which exception class should you catch?",
       "a": "It raises json.JSONDecodeError (a subclass of ValueError) because JSON requires double quotes. Catch json.JSONDecodeError, not bare Exception."
+    },
+    {
+      "id": "intel-2026-11-28",
+      "tree": "aws",
+      "source": "intel",
+      "created": "2026-11-28",
+      "interval_days": 3,
+      "due_date": "2026-12-01",
+      "q": "A request passes through 5 layers and every layer makes up to 3 attempts on failure. Worst case, how many calls reach the bottom layer, and what two changes stop it?",
+      "a": "3^5 = 243. Do not retry at every layer (retry in one place), and cap attempts with exponential backoff plus jitter."
     }
   ]
 }

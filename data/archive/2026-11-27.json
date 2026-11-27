@@ -1,0 +1,143 @@
+{
+  "schema": 1,
+  "date": "2026-11-27",
+  "day": 1,
+  "phase": "trace",
+  "headline": {
+    "quick": "Trace a parser: what does parse() return for 4 model replies?",
+    "dungeon": "Tutorials Dojo 20-question diagnostic, then a hanging agent loop and a container that cannot write"
+  },
+  "intel": {
+    "title": "Model output is untrusted input: fail loudly at the parse boundary",
+    "bullets": [
+      "json.loads raises json.JSONDecodeError on anything that is not valid JSON. Single-quoted keys are not valid JSON.",
+      "JSONDecodeError is a subclass of ValueError. Catch that, not a bare Exception.",
+      "On a parse failure, do not return an empty dict. Send the error text back to the model as the tool result so it can correct itself.",
+      "Count every loop iteration, successful or not, so one bad reply cannot spin forever."
+    ],
+    "source": {
+      "title": "Python docs: json (JSONDecodeError)",
+      "url": "https://docs.python.org/3/library/json.html"
+    },
+    "why": "Handling malformed tool arguments is the error path your Tree 1 boss fight requires, and it is the first thing to check when an agent hangs in production.",
+    "question": {
+      "id": "intel-2026-11-27",
+      "q": "json.loads(\"{'a': 1}\") - what happens, and which exception class should you catch?",
+      "a": "It raises json.JSONDecodeError (a subclass of ValueError) because JSON requires double quotes. Catch json.JSONDecodeError, not bare Exception."
+    }
+  },
+  "tiers": {
+    "quick": {
+      "minutes": 15,
+      "xp": 50,
+      "tree_xp": {
+        "python": 50
+      },
+      "quests": [
+        {
+          "id": "d01-py-micro",
+          "tree": "python",
+          "minutes": 9,
+          "title": "Micro-drill: trace parse() by hand",
+          "brief": "No running code, no AI. Read lines 1 to 25 and predict what happens. Paper or the reMarkable is fine.",
+          "code": "import json\n\nTICKETS = {\"T-101\": \"open\", \"T-102\": \"closed\"}\n\ndef get_status(ticket_id):\n    return TICKETS[ticket_id]\n\nTOOLS = {\"get_status\": get_status}\n\nSCRIPTED = [\n    '{\"tool\": \"get_status\", \"args\": {\"ticket_id\": \"T-101\"}}',\n    '{\"tool\": \"get_status\", \"args\": {\"ticket_id\": \"T-999\"}}',\n    \"{'tool': 'get_status', 'args': {'ticket_id': 'T-102'}}\",\n    '{\"final\": \"T-101 is open\"}',\n]\n\ndef call_model(history):\n    turn = sum(1 for m in history if m[\"role\"] == \"assistant\")\n    return SCRIPTED[min(turn, len(SCRIPTED) - 1)]\n\ndef parse(reply):\n    try:\n        return json.loads(reply)\n    except Exception:\n        return {}",
+          "tasks": [
+            "For each of the 4 strings in SCRIPTED, write down exactly what parse() returns.",
+            "For the one that differs, write one sentence saying why.",
+            "Write what call_model() returns when history contains zero assistant messages, and when it contains ten."
+          ],
+          "done_condition": "You have 4 written return values plus 2 call_model answers, and they match the answer key.",
+          "answer_key": [
+            "Reply 1: {'tool': 'get_status', 'args': {'ticket_id': 'T-101'}}",
+            "Reply 2: {'tool': 'get_status', 'args': {'ticket_id': 'T-999'}}",
+            "Reply 3: {} - single quotes are not valid JSON, json.loads raises JSONDecodeError, and the bare except hides it.",
+            "Reply 4: {'final': 'T-101 is open'}",
+            "call_model with zero assistant messages returns SCRIPTED[0]; with ten it returns SCRIPTED[3], because min() clamps the index to the last item."
+          ]
+        }
+      ]
+    },
+    "standard": {
+      "minutes": 45,
+      "xp": 150,
+      "tree_xp": {
+        "python": 50,
+        "aws": 100
+      },
+      "quests": [
+        {
+          "id": "d01-aws-diagnostic",
+          "tree": "aws",
+          "minutes": 30,
+          "title": "Diagnostic: 20 Tutorials Dojo questions, untimed",
+          "brief": "This sets your starting line for Tree 2. A low score is the useful result here: it tells tonight's build which domains to drill.",
+          "tasks": [
+            "Open your Tutorials Dojo SAA-C03 practice exams and start the first set in Review Mode.",
+            "Answer the first 20 questions untimed, then stop. Do not look anything up.",
+            "For each miss, write one line: why the wrong option looked right to you.",
+            "Tally misses under the four exam domains: Secure, Resilient, High-Performing, Cost-Optimized architectures.",
+            "Type your score and your two weakest domains into the check-in fields below."
+          ],
+          "done_condition": "The check-in has a score out of 20 and at least one weak domain or topic typed in."
+        }
+      ]
+    },
+    "double": {
+      "minutes": 90,
+      "xp": 325,
+      "tree_xp": {
+        "python": 120,
+        "aws": 100,
+        "wargames": 105
+      },
+      "quests": [
+        {
+          "id": "d01-py-trace",
+          "tree": "python",
+          "minutes": 25,
+          "title": "Trace the full loop: find 3 planted bugs",
+          "brief": "This 44-line agent loop has three bugs. Find them by reading. Predict what the program prints before you run anything. AI autocomplete off.",
+          "code": "import json\n\nTICKETS = {\"T-101\": \"open\", \"T-102\": \"closed\"}\n\ndef get_status(ticket_id):\n    return TICKETS[ticket_id]\n\nTOOLS = {\"get_status\": get_status}\n\nSCRIPTED = [\n    '{\"tool\": \"get_status\", \"args\": {\"ticket_id\": \"T-101\"}}',\n    '{\"tool\": \"get_status\", \"args\": {\"ticket_id\": \"T-999\"}}',\n    \"{'tool': 'get_status', 'args': {'ticket_id': 'T-102'}}\",\n    '{\"final\": \"T-101 is open\"}',\n]\n\ndef call_model(history):\n    turn = sum(1 for m in history if m[\"role\"] == \"assistant\")\n    return SCRIPTED[min(turn, len(SCRIPTED) - 1)]\n\ndef parse(reply):\n    try:\n        return json.loads(reply)\n    except Exception:\n        return {}\n\ndef run(question, max_turns=6):\n    history = [{\"role\": \"user\", \"content\": question}]\n    turns = 0\n    while turns < max_turns:\n        reply = call_model(history)\n        action = parse(reply)\n        if \"final\" in action:\n            return action[\"final\"]\n        try:\n            result = TOOLS[action[\"tool\"]](**action[\"args\"])\n        except Exception:\n            continue\n        history.append({\"role\": \"assistant\", \"content\": reply})\n        history.append({\"role\": \"tool\", \"content\": str(result)})\n        turns += 1\n    return \"gave up\"\n\nprint(run(\"What is the status of T-101?\"))",
+          "tasks": [
+            "Trace run() turn by turn. Keep a table: turn, reply, action, what happens to history and to turns.",
+            "Write your prediction: what does the program print, and when does it stop?",
+            "Write the line numbers of the three bugs and one sentence on each.",
+            "Now save it as trace01.py and run: timeout 3 python3 trace01.py; echo $?",
+            "Compare the exit code with your prediction, then open the answer key."
+          ],
+          "done_condition": "You have three line numbers written down before running it, and the exit code is 124.",
+          "answer_key": [
+            "Lines 24-25: parse() swallows every exception and returns {}. A malformed reply is indistinguishable from an empty one.",
+            "Lines 37-38: the tool call's errors are swallowed and 'continue' skips the history append, so the model never learns that the call failed.",
+            "Lines 38 and 41: turns only increments on success, so max_turns does not bound a failing loop.",
+            "What actually happens: turn 1 succeeds (T-101). Reply 2 asks for T-999, get_status raises KeyError, 'continue' runs, history is unchanged, so call_model returns reply 2 again, forever. Nothing is printed. timeout kills it: exit code 124.",
+            "The single-quoted reply 3 is never reached, but it would hang the same way: parse() returns {}, then action['tool'] raises KeyError."
+          ]
+        },
+        {
+          "id": "d01-wg-1",
+          "tree": "wargames",
+          "minutes": 20,
+          "title": "War-Game 1: the container that cannot write",
+          "brief": "A customer runs your agent in rootless Podman on RHEL 9. After they moved the data directory it crashes at startup. They say: 'It worked yesterday. We already ran chmod 777. Can you just run it as root?' Set a 15-minute timer. Evidence is in the code block.",
+          "code": "# old runbook (worked yesterday)\npodman run --rm -v /home/svc-agent/data:/data:Z registry.example/agent:1.4\n\n# new runbook (fails today)\n$ podman run --rm -v /srv/agent-data:/data:rw registry.example/agent:1.4\nPermissionError: [Errno 13] Permission denied: '/data/state.db'\n\n$ ls -ld /srv/agent-data\ndrwxrwxrwx. 2 svc-agent svc-agent 4096 Nov 26 09:14 /srv/agent-data\n\n$ getenforce\nEnforcing\n\n$ sudo ausearch -m avc -ts recent | tail -1\ntype=AVC msg=audit(1795914872.114:912): avc:  denied  { write } for pid=4121\n  comm=\"python3\" name=\"agent-data\"\n  scontext=system_u:system_r:container_t:s0:c123,c456\n  tcontext=unconfined_u:object_r:var_t:s0 tclass=dir permissive=0",
+          "tasks": [
+            "Write the 4-bullet RCA brief, one line each:",
+            "[C] Confirmed signal from the logs or symptoms. Facts only.",
+            "[I] Root-cause hypothesis.",
+            "[?] The single highest-value command or check to verify it.",
+            "[Fix] The minimal reversible remediation. Also say in one line why you will not run it as root."
+          ],
+          "done_condition": "Four bullets are written, [C] contains no guesses, and your [?] is one command.",
+          "answer_key": [
+            "[C] Write to /data fails with EACCES while the directory is mode 777, so Unix permissions are not the cause. SELinux is Enforcing and logged an AVC denial: container_t writing to a var_t directory.",
+            "[I] The new mount flag dropped ':Z', so /srv/agent-data kept its default var_t label and SELinux blocks the container.",
+            "[?] ls -Zd /srv/agent-data - expect var_t where container_file_t is needed.",
+            "[Fix] Put ':Z' back on the volume flag so Podman relabels the directory. Reversible with restorecon -R /srv/agent-data.",
+            "Not root, not setenforce 0, not more chmod: none of them address the label, and the first two remove a security control from the customer's host."
+          ]
+        }
+      ]
+    }
+  }
+}

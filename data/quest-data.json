@@ -1,29 +1,30 @@
 {
   "schema": 1,
-  "date": "2026-11-27",
-  "day": 1,
+  "date": "2026-11-28",
+  "day": 2,
   "phase": "trace",
   "headline": {
-    "quick": "Trace a parser: what does parse() return for 4 model replies?",
-    "dungeon": "Tutorials Dojo 20-question diagnostic, then a hanging agent loop and a container that cannot write"
+    "quick": "Trace a 19-line retry loop: what prints, and when does it give up?",
+    "dungeon": "Trace retry and error paths, a 10-q Resilient quiz, and a proxy that breaks TLS"
   },
   "intel": {
-    "title": "Model output is untrusted input: fail loudly at the parse boundary",
+    "title": "Retries are selfish: back off, add jitter, cap them",
     "bullets": [
-      "json.loads raises json.JSONDecodeError on anything that is not valid JSON. Single-quoted keys are not valid JSON.",
-      "JSONDecodeError is a subclass of ValueError. Catch that, not a bare Exception.",
-      "On a parse failure, do not return an empty dict. Send the error text back to the model as the tool result so it can correct itself.",
-      "Count every loop iteration, successful or not, so one bad reply cannot spin forever."
+      "A retry spends the server's capacity to improve your own odds. When the failure is overload, retries make it worse.",
+      "Use exponential backoff, and cap both the backoff delay and the number of attempts.",
+      "Add jitter (randomness) to the delay, or every client that failed together retries together and collides again.",
+      "Retries at each layer multiply: 3 attempts per layer across 5 layers is 3^5 = 243x load at the bottom.",
+      "Do not retry client errors with the same request, and do not retry side-effecting calls unless the API is idempotent."
     ],
     "source": {
-      "title": "Python docs: json (JSONDecodeError)",
-      "url": "https://docs.python.org/3/library/json.html"
+      "title": "Amazon Builders' Library: Timeouts, retries, and backoff with jitter",
+      "url": "https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter"
     },
-    "why": "Handling malformed tool arguments is the error path your Tree 1 boss fight requires, and it is the first thing to check when an agent hangs in production.",
+    "why": "Retry with backoff is your Day 6 fill-in and part of the raid boss, and a retry storm is the first thing to rule out when a flaky downstream API takes a customer down.",
     "question": {
-      "id": "intel-2026-11-27",
-      "q": "json.loads(\"{'a': 1}\") - what happens, and which exception class should you catch?",
-      "a": "It raises json.JSONDecodeError (a subclass of ValueError) because JSON requires double quotes. Catch json.JSONDecodeError, not bare Exception."
+      "id": "intel-2026-11-28",
+      "q": "A request passes through 5 layers and every layer makes up to 3 attempts on failure. Worst case, how many calls reach the bottom layer, and what two changes stop it?",
+      "a": "3^5 = 243. Do not retry at every layer (retry in one place), and cap attempts with exponential backoff plus jitter."
     }
   },
   "tiers": {
@@ -35,24 +36,22 @@
       },
       "quests": [
         {
-          "id": "d01-py-micro",
+          "id": "d02-py-micro",
           "tree": "python",
           "minutes": 9,
-          "title": "Micro-drill: trace parse() by hand",
-          "brief": "No running code, no AI. Read lines 1 to 25 and predict what happens. Paper or the reMarkable is fine.",
-          "code": "import json\n\nTICKETS = {\"T-101\": \"open\", \"T-102\": \"closed\"}\n\ndef get_status(ticket_id):\n    return TICKETS[ticket_id]\n\nTOOLS = {\"get_status\": get_status}\n\nSCRIPTED = [\n    '{\"tool\": \"get_status\", \"args\": {\"ticket_id\": \"T-101\"}}',\n    '{\"tool\": \"get_status\", \"args\": {\"ticket_id\": \"T-999\"}}',\n    \"{'tool': 'get_status', 'args': {'ticket_id': 'T-102'}}\",\n    '{\"final\": \"T-101 is open\"}',\n]\n\ndef call_model(history):\n    turn = sum(1 for m in history if m[\"role\"] == \"assistant\")\n    return SCRIPTED[min(turn, len(SCRIPTED) - 1)]\n\ndef parse(reply):\n    try:\n        return json.loads(reply)\n    except Exception:\n        return {}",
+          "title": "Micro-drill: trace a retry loop by hand",
+          "brief": "No running code, no AI. Read the 19 lines and predict the output. Paper or the reMarkable is fine.",
+          "code": "calls = []\n\ndef flaky(n):\n    calls.append(n)\n    if len(calls) < 3:\n        raise TimeoutError(\"slow\")\n    return \"ok\"\n\ndef retry(fn, arg, attempts=3):\n    for i in range(attempts):\n        try:\n            return fn(arg)\n        except TimeoutError as e:\n            last = e\n            print(\"retry\", i)\n    raise last\n\nprint(retry(flaky, 7))\nprint(len(calls))",
           "tasks": [
-            "For each of the 4 strings in SCRIPTED, write down exactly what parse() returns.",
-            "For the one that differs, write one sentence saying why.",
-            "Write what call_model() returns when history contains zero assistant messages, and when it contains ten."
+            "Write the exact lines the program prints, in order.",
+            "Write what happens instead if the default is attempts=2.",
+            "Write what happens instead if flaky() raises ValueError rather than TimeoutError."
           ],
-          "done_condition": "You have 4 written return values plus 2 call_model answers, and they match the answer key.",
+          "done_condition": "You have three written predictions and all three match the answer key.",
           "answer_key": [
-            "Reply 1: {'tool': 'get_status', 'args': {'ticket_id': 'T-101'}}",
-            "Reply 2: {'tool': 'get_status', 'args': {'ticket_id': 'T-999'}}",
-            "Reply 3: {} - single quotes are not valid JSON, json.loads raises JSONDecodeError, and the bare except hides it.",
-            "Reply 4: {'final': 'T-101 is open'}",
-            "call_model with zero assistant messages returns SCRIPTED[0]; with ten it returns SCRIPTED[3], because min() clamps the index to the last item."
+            "As written (run, exit code 0): retry 0 / retry 1 / ok / 3. Calls 1 and 2 time out, call 3 succeeds, and calls holds three items.",
+            "attempts=2 (run, exit code 1): prints retry 0 and retry 1, then 'raise last' re-raises the second TimeoutError: slow. Nothing else prints.",
+            "ValueError (run, exit code 1): the except clause only catches TimeoutError, so the first ValueError escapes immediately. No 'retry' line prints. That is the point: only retry errors you know are transient."
           ]
         }
       ]
@@ -61,24 +60,34 @@
       "minutes": 45,
       "xp": 150,
       "tree_xp": {
-        "python": 50,
-        "aws": 100
+        "python": 150
       },
       "quests": [
         {
-          "id": "d01-aws-diagnostic",
-          "tree": "aws",
+          "id": "d02-py-trace",
+          "tree": "python",
           "minutes": 30,
-          "title": "Diagnostic: 20 Tutorials Dojo questions, untimed",
-          "brief": "This sets your starting line for Tree 2. A low score is the useful result here: it tells tonight's build which domains to drill.",
+          "title": "Trace retry and error paths in a model call",
+          "brief": "A scripted fake call_model raises a timeout, a 429, returns broken JSON, then a final answer. Trace call_with_retry() turn by turn and predict everything it prints before you run it. AI autocomplete off, docs allowed.",
+          "code": "import json\n\nclass RateLimited(Exception):\n    def __init__(self, retry_after):\n        super().__init__(f\"429, retry after {retry_after}s\")\n        self.retry_after = retry_after\n\nSCRIPT = [\n    TimeoutError(\"read timed out\"),\n    RateLimited(retry_after=5),\n    '{\"tool\": \"lookup\", \"args\": {\"id\": 7}',\n    '{\"final\": \"id 7 is active\"}',\n    TimeoutError(\"read timed out\"),\n    TimeoutError(\"read timed out\"),\n]\n\ndef call_model(prompt, _state={\"i\": 0}):\n    item = SCRIPT[_state[\"i\"]]\n    _state[\"i\"] += 1\n    if isinstance(item, Exception):\n        raise item\n    return item\n\nsleeps = []\n\ndef sleep(seconds):\n    sleeps.append(seconds)\n\ndef call_with_retry(prompt, max_attempts=4, base=1.0):\n    for attempt in range(max_attempts):\n        try:\n            reply = call_model(prompt)\n            return json.loads(reply)\n        except RateLimited as e:\n            delay = e.retry_after\n        except TimeoutError:\n            delay = base * 2 ** attempt\n        except json.JSONDecodeError as e:\n            return {\"error\": f\"bad JSON from model: {e.msg}\"}\n        sleep(delay)\n    raise RuntimeError(f\"gave up after {max_attempts} attempts\")\n\nprint(call_with_retry(\"status of 7?\"))\nprint(call_with_retry(\"again?\"))\nprint(sleeps)\nprint(call_with_retry(\"third?\", max_attempts=2))",
           "tasks": [
-            "Open your Tutorials Dojo SAA-C03 practice exams and start the first set in Review Mode.",
-            "Answer the first 20 questions untimed, then stop. Do not look anything up.",
-            "For each miss, write one line: why the wrong option looked right to you.",
-            "Tally misses under the four exam domains: Secure, Resilient, High-Performing, Cost-Optimized architectures.",
-            "Type your score and your two weakest domains into the check-in fields below."
+            "Keep a table for each call_with_retry(): attempt, what call_model does, which except branch runs, delay, return or raise.",
+            "Write the 4 things the program prints (the last one is a traceback: name its exception and message).",
+            "Write the full contents of sleeps at the moment the program crashes.",
+            "Find the design flaw in the last loop iteration and the missing piece the intel card says every backoff needs. One sentence each.",
+            "Save it as trace02.py, run python3 trace02.py; echo $?, and compare with your table."
           ],
-          "done_condition": "The check-in has a score out of 20 and at least one weak domain or topic typed in."
+          "done_condition": "Your written predictions for the 4 outputs match the real run, and the exit code is 1.",
+          "answer_key": [
+            "Call 1: attempt 0 TimeoutError, delay 1.0 (1.0 * 2**0). Attempt 1 RateLimited, delay 5 from retry_after. Attempt 2 gets '{\"tool\": ..., \"args\": {\"id\": 7}' with the closing brace missing; json.loads raises JSONDecodeError and the function returns the error dict without sleeping.",
+            "Real output, line 1: {'error': \"bad JSON from model: Expecting ',' delimiter\"}",
+            "Line 2: {'final': 'id 7 is active'} - the mutable default _state={'i': 0} persists across calls, so the second call reads SCRIPT[3].",
+            "Line 3: [1.0, 5]",
+            "Line 4: Traceback ending RuntimeError: gave up after 2 attempts. Exit code 1.",
+            "sleeps at the crash is [1.0, 5, 1.0, 2.0] (checked by catching the RuntimeError in a copy). attempt resets per call, so the third call backs off 1.0 then 2.0.",
+            "Flaw: the loop sleeps 2.0s after the final failed attempt and then gives up anyway; that last sleep is wasted. Missing: jitter, so every client that failed together retries together. Also no cap on delay, and a RateLimited retry_after is trusted blindly.",
+            "Good part to keep: JSONDecodeError is not retried with the same request. It is returned as an error the model can act on."
+          ]
         }
       ]
     },
@@ -86,55 +95,46 @@
       "minutes": 90,
       "xp": 325,
       "tree_xp": {
-        "python": 120,
-        "aws": 100,
-        "wargames": 105
+        "python": 150,
+        "aws": 90,
+        "wargames": 85
       },
       "quests": [
         {
-          "id": "d01-py-trace",
-          "tree": "python",
-          "minutes": 25,
-          "title": "Trace the full loop: find 3 planted bugs",
-          "brief": "This 44-line agent loop has three bugs. Find them by reading. Predict what the program prints before you run anything. AI autocomplete off.",
-          "code": "import json\n\nTICKETS = {\"T-101\": \"open\", \"T-102\": \"closed\"}\n\ndef get_status(ticket_id):\n    return TICKETS[ticket_id]\n\nTOOLS = {\"get_status\": get_status}\n\nSCRIPTED = [\n    '{\"tool\": \"get_status\", \"args\": {\"ticket_id\": \"T-101\"}}',\n    '{\"tool\": \"get_status\", \"args\": {\"ticket_id\": \"T-999\"}}',\n    \"{'tool': 'get_status', 'args': {'ticket_id': 'T-102'}}\",\n    '{\"final\": \"T-101 is open\"}',\n]\n\ndef call_model(history):\n    turn = sum(1 for m in history if m[\"role\"] == \"assistant\")\n    return SCRIPTED[min(turn, len(SCRIPTED) - 1)]\n\ndef parse(reply):\n    try:\n        return json.loads(reply)\n    except Exception:\n        return {}\n\ndef run(question, max_turns=6):\n    history = [{\"role\": \"user\", \"content\": question}]\n    turns = 0\n    while turns < max_turns:\n        reply = call_model(history)\n        action = parse(reply)\n        if \"final\" in action:\n            return action[\"final\"]\n        try:\n            result = TOOLS[action[\"tool\"]](**action[\"args\"])\n        except Exception:\n            continue\n        history.append({\"role\": \"assistant\", \"content\": reply})\n        history.append({\"role\": \"tool\", \"content\": str(result)})\n        turns += 1\n    return \"gave up\"\n\nprint(run(\"What is the status of T-101?\"))",
+          "id": "d02-aws-resilient",
+          "tree": "aws",
+          "minutes": 20,
+          "title": "Tutorials Dojo: 10 questions on Design Resilient Architectures",
+          "brief": "Today's target is your weakest domain. If you did yesterday's diagnostic, use the weakest domain it showed. If not, take Design Resilient Architectures, which pairs with today's retry theme (decoupling, queues, Multi-AZ).",
           "tasks": [
-            "Trace run() turn by turn. Keep a table: turn, reply, action, what happens to history and to turns.",
-            "Write your prediction: what does the program print, and when does it stop?",
-            "Write the line numbers of the three bugs and one sentence on each.",
-            "Now save it as trace01.py and run: timeout 3 python3 trace01.py; echo $?",
-            "Compare the exit code with your prediction, then open the answer key."
+            "In your Tutorials Dojo SAA-C03 portal, open the domain or topic quiz for your chosen domain and answer 10 questions without looking anything up.",
+            "For each miss, write one line: why the distractor looked right to you.",
+            "Type your score (x/10) and the missed topics into the check-in's TD fields."
           ],
-          "done_condition": "You have three line numbers written down before running it, and the exit code is 124.",
-          "answer_key": [
-            "Lines 24-25: parse() swallows every exception and returns {}. A malformed reply is indistinguishable from an empty one.",
-            "Lines 37-38: the tool call's errors are swallowed and 'continue' skips the history append, so the model never learns that the call failed.",
-            "Lines 38 and 41: turns only increments on success, so max_turns does not bound a failing loop.",
-            "What actually happens: turn 1 succeeds (T-101). Reply 2 asks for T-999, get_status raises KeyError, 'continue' runs, history is unchanged, so call_model returns reply 2 again, forever. Nothing is printed. timeout kills it: exit code 124.",
-            "The single-quoted reply 3 is never reached, but it would hang the same way: parse() returns {}, then action['tool'] raises KeyError."
-          ]
+          "done_condition": "The check-in has a score out of 10 and one written line for every miss."
         },
         {
-          "id": "d01-wg-1",
+          "id": "d02-wg-tls-proxy",
           "tree": "wargames",
-          "minutes": 20,
-          "title": "War-Game 1: the container that cannot write",
-          "brief": "A customer runs your agent in rootless Podman on RHEL 9. After they moved the data directory it crashes at startup. They say: 'It worked yesterday. We already ran chmod 777. Can you just run it as root?' Set a 15-minute timer. Evidence is in the code block.",
-          "code": "# old runbook (worked yesterday)\npodman run --rm -v /home/svc-agent/data:/data:Z registry.example/agent:1.4\n\n# new runbook (fails today)\n$ podman run --rm -v /srv/agent-data:/data:rw registry.example/agent:1.4\nPermissionError: [Errno 13] Permission denied: '/data/state.db'\n\n$ ls -ld /srv/agent-data\ndrwxrwxrwx. 2 svc-agent svc-agent 4096 Nov 26 09:14 /srv/agent-data\n\n$ getenforce\nEnforcing\n\n$ sudo ausearch -m avc -ts recent | tail -1\ntype=AVC msg=audit(1795914872.114:912): avc:  denied  { write } for pid=4121\n  comm=\"python3\" name=\"agent-data\"\n  scontext=system_u:system_r:container_t:s0:c123,c456\n  tcontext=unconfined_u:object_r:var_t:s0 tclass=dir permissive=0",
+          "minutes": 25,
+          "title": "War-Game 2: curl works, Python does not",
+          "brief": "A customer's agent container cannot reach the model API. Curl on the host is fine, so they blame your code and ask you to ship verify=False. Set a 15-minute timer. Evidence is in the code block.",
+          "code": "# Customer: agent container on an Ubuntu 24.04 VM, egress through the corporate proxy.\n# Quote: \"Curl works fine from the box, so it's your code. Can you just ship verify=False?\n#         We're behind our own firewall anyway.\"\n\n$ podman exec agent env | grep -i proxy\nHTTPS_PROXY=http://proxy.corp.example:3128\nNO_PROXY=localhost,127.0.0.1,.internal\n\n$ podman logs --tail 3 agent\nINFO  health check http://inventory.internal/health -> 200\nERROR model call failed: requests.exceptions.SSLError: HTTPSConnectionPool(host='api.vendor.example', port=443): Max retries exceeded with url: /v1/chat (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1006)')))\nERROR retrying in 2.0s (attempt 2/5)\n\n# On the VM host (not in the container):\n$ curl -sv -o /dev/null https://api.vendor.example/v1/models 2>&1 | grep -E 'proxy|issuer|verify'\n* Uses proxy env variable HTTPS_PROXY == 'http://proxy.corp.example:3128'\n*  issuer: CN=Example Corp TLS Inspection CA\n*  SSL certificate verify ok.\n\n$ podman exec agent python3 -c 'import certifi; print(certifi.where())'\n/usr/local/lib/python3.12/site-packages/certifi/cacert.pem",
           "tasks": [
             "Write the 4-bullet RCA brief, one line each:",
-            "[C] Confirmed signal from the logs or symptoms. Facts only.",
+            "[C] Confirmed signal. Facts only, no guesses.",
             "[I] Root-cause hypothesis.",
-            "[?] The single highest-value command or check to verify it.",
-            "[Fix] The minimal reversible remediation. Also say in one line why you will not run it as root."
+            "[?] The single highest-value command to verify it.",
+            "[Fix] The minimal reversible remediation, plus one line on why verify=False is not it."
           ],
-          "done_condition": "Four bullets are written, [C] contains no guesses, and your [?] is one command.",
+          "done_condition": "Four bullets are written, [C] contains only facts from the evidence, and [?] is a single command.",
           "answer_key": [
-            "[C] Write to /data fails with EACCES while the directory is mode 777, so Unix permissions are not the cause. SELinux is Enforcing and logged an AVC denial: container_t writing to a var_t directory.",
-            "[I] The new mount flag dropped ':Z', so /srv/agent-data kept its default var_t label and SELinux blocks the container.",
-            "[?] ls -Zd /srv/agent-data - expect var_t where container_file_t is needed.",
-            "[Fix] Put ':Z' back on the volume flag so Podman relabels the directory. Reversible with restorecon -R /srv/agent-data.",
-            "Not root, not setenforce 0, not more chmod: none of them address the label, and the first two remove a security control from the customer's host."
+            "[C] From inside the container, HTTPS to api.vendor.example fails certificate verification (unable to get local issuer certificate). From the host, the same API through the same proxy verifies, and the presented issuer is 'Example Corp TLS Inspection CA'. The internal health check is plain HTTP and bypasses the proxy via NO_PROXY, so it proves nothing about TLS.",
+            "[I] The proxy intercepts TLS and re-signs with the corporate CA. The host trusts that CA in its system store; requests in the container uses certifi's bundled cacert.pem, which does not contain it.",
+            "[?] podman exec agent python3 -c \"import requests; requests.get('https://api.vendor.example/v1/models', verify='/etc/ssl/certs/ca-certificates.crt')\" after placing the corporate CA in the container's system store. Success there, while the default call fails, confirms it. (An equally good answer: grep the CA name in certifi's cacert.pem and get no match.)",
+            "[Fix] Add the corporate CA to the image (copy the .crt to /usr/local/share/ca-certificates/ and run update-ca-certificates), then set REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt. Reversible by unsetting the variable.",
+            "verify=False disables certificate checking for every host, so anything on the path can impersonate the API and read the prompts and API key. It also hides the real cause from the next engineer.",
+            "The retry line is a smell too: a certificate failure is not transient, so retrying it 5 times only adds delay."
           ]
         }
       ]

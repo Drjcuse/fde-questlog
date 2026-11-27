@@ -4,7 +4,7 @@
   "repo": "fde-questlog",
   "start_date": "2026-11-27",
   "target_date": "2026-12-17",
-  "day": 1,
+  "day": 2,
   "total_xp": 0,
   "trees": {
     "python": {
@@ -17,9 +17,9 @@
       "xp": 0
     }
   },
-  "rested_xp_active": false,
-  "rested_stack": 0,
-  "missed_days": 0,
+  "rested_xp_active": true,
+  "rested_stack": 1,
+  "missed_days": 1,
   "last_checkin": null,
   "days_checked_in": 0,
   "titles": [],
