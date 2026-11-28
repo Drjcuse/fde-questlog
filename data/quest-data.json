@@ -1,30 +1,29 @@
 {
   "schema": 1,
-  "date": "2026-11-28",
-  "day": 2,
+  "date": "2026-11-29",
+  "day": 3,
   "phase": "trace",
   "headline": {
-    "quick": "Trace a 19-line retry loop: what prints, and when does it give up?",
-    "dungeon": "Trace retry and error paths, a 10-q Resilient quiz, and a proxy that breaks TLS"
+    "quick": "5 quick AWS questions on VPC DNS: base+2, private zones, Resolver endpoints",
+    "dungeon": "DNS war-game: zone associated, name not found; trace a tool loop; 10-q TD quiz"
   },
   "intel": {
-    "title": "Retries are selfish: back off, add jitter, cap them",
+    "title": "Private hosted zones only answer through the VPC's own DNS",
     "bullets": [
-      "A retry spends the server's capacity to improve your own odds. When the failure is overload, retries make it worse.",
-      "Use exponential backoff, and cap both the backoff delay and the number of attempts.",
-      "Add jitter (randomness) to the delay, or every client that failed together retries together and collides again.",
-      "Retries at each layer multiply: 3 attempts per layer across 5 layers is 3^5 = 243x load at the bottom.",
-      "Do not retry client errors with the same request, and do not retry side-effecting calls unless the API is idempotent."
+      "Every VPC has an Amazon-provided DNS server at the VPC CIDR base plus two: 10.20.0.2 for 10.20.0.0/16.",
+      "Private hosted zones need two VPC attributes set to true: enableDnsHostnames and enableDnsSupport.",
+      "If your instances use custom DNS servers, those servers must forward queries for the private zone to the Amazon-provided DNS server. Associating the zone with the VPC is not enough on its own.",
+      "Debug by asking both servers directly: dig @<custom server> name, then dig @<base+2> name. Different answers tell you which hop is missing."
     ],
     "source": {
-      "title": "Amazon Builders' Library: Timeouts, retries, and backoff with jitter",
-      "url": "https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter"
+      "title": "Amazon Route 53 Developer Guide: Considerations when working with a private hosted zone",
+      "url": "https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/hosted-zone-private-considerations.html"
     },
-    "why": "Retry with backoff is your Day 6 fill-in and part of the raid boss, and a retry storm is the first thing to rule out when a flaky downstream API takes a customer down.",
+    "why": "Customers moving DNS to their own servers is one of the most common ways a working AWS deployment loses its private names overnight, and it is tonight's war-game.",
     "question": {
-      "id": "intel-2026-11-28",
-      "q": "A request passes through 5 layers and every layer makes up to 3 attempts on failure. Worst case, how many calls reach the bottom layer, and what two changes stop it?",
-      "a": "3^5 = 243. Do not retry at every layer (retry in one place), and cap attempts with exponential backoff plus jitter."
+      "id": "intel-2026-11-29",
+      "q": "EC2 instances in a VPC use custom DNS servers (set in the DHCP option set). A private hosted zone associated with that VPC returns NXDOMAIN. What must the custom DNS servers do, and which two VPC attributes must be true?",
+      "a": "Forward queries for the private zone to the Amazon-provided DNS server at the VPC CIDR base plus two (10.20.0.2 for 10.20.0.0/16). enableDnsHostnames and enableDnsSupport must both be true."
     }
   },
   "tiers": {
@@ -32,26 +31,29 @@
       "minutes": 15,
       "xp": 50,
       "tree_xp": {
-        "python": 50
+        "aws": 50
       },
       "quests": [
         {
-          "id": "d02-py-micro",
-          "tree": "python",
+          "id": "d03-aws-micro",
+          "tree": "aws",
           "minutes": 9,
-          "title": "Micro-drill: trace a retry loop by hand",
-          "brief": "No running code, no AI. Read the 19 lines and predict the output. Paper or the reMarkable is fine.",
-          "code": "calls = []\n\ndef flaky(n):\n    calls.append(n)\n    if len(calls) < 3:\n        raise TimeoutError(\"slow\")\n    return \"ok\"\n\ndef retry(fn, arg, attempts=3):\n    for i in range(attempts):\n        try:\n            return fn(arg)\n        except TimeoutError as e:\n            last = e\n            print(\"retry\", i)\n    raise last\n\nprint(retry(flaky, 7))\nprint(len(calls))",
+          "title": "Micro-drill: 5 questions on VPC DNS",
+          "brief": "Original questions, no lookups. One line per answer. They set up tonight's DNS war-game.",
           "tasks": [
-            "Write the exact lines the program prints, in order.",
-            "Write what happens instead if the default is attempts=2.",
-            "Write what happens instead if flaky() raises ValueError rather than TimeoutError."
+            "Q1. A VPC uses 10.20.0.0/16. At which IPv4 address inside the VPC CIDR is the Amazon-provided DNS server (Route 53 Resolver)?",
+            "Q2. A private hosted zone is associated with a VPC, but nothing in the VPC can resolve its records. The DHCP option set is the default. Which two VPC attributes do you check first?",
+            "Q3. Servers in an on-premises data centre, connected over Site-to-Site VPN, must resolve names in a private hosted zone. Which Route 53 Resolver component do you create in the VPC, and what do the on-prem DNS servers point at it?",
+            "Q4. EC2 instances must resolve names in an on-prem domain (corp.example) that only the on-prem DNS servers know. Which two Route 53 Resolver pieces do you create?",
+            "Q5. api.example.com exists in a public hosted zone (203.0.113.10) and in a private hosted zone associated with your VPC (10.20.3.15). An instance in that VPC using Amazon DNS looks it up. Which address does it get?"
           ],
-          "done_condition": "You have three written predictions and all three match the answer key.",
+          "done_condition": "You wrote 5 one-line answers and at least 4 match the answer key.",
           "answer_key": [
-            "As written (run, exit code 0): retry 0 / retry 1 / ok / 3. Calls 1 and 2 time out, call 3 succeeds, and calls holds three items.",
-            "attempts=2 (run, exit code 1): prints retry 0 and retry 1, then 'raise last' re-raises the second TimeoutError: slow. Nothing else prints.",
-            "ValueError (run, exit code 1): the except clause only catches TimeoutError, so the first ValueError escapes immediately. No 'retry' line prints. That is the point: only retry errors you know are transient."
+            "Q1. 10.20.0.2: the VPC CIDR base plus two. (169.254.169.253 also reaches it, but it is not in the VPC CIDR.)",
+            "Q2. enableDnsSupport and enableDnsHostnames. Both must be true for private hosted zones.",
+            "Q3. An inbound endpoint. The on-prem servers get a conditional forwarder for the private zone's domain that points at the inbound endpoint's IP addresses.",
+            "Q4. An outbound endpoint plus a forwarding rule for corp.example (targeting the on-prem DNS server IPs), associated with the VPC.",
+            "Q5. 10.20.3.15. Inside an associated VPC, the private hosted zone answers for its namespace, so the private record wins."
           ]
         }
       ]
@@ -60,33 +62,33 @@
       "minutes": 45,
       "xp": 150,
       "tree_xp": {
-        "python": 150
+        "aws": 50,
+        "wargames": 100
       },
       "quests": [
         {
-          "id": "d02-py-trace",
-          "tree": "python",
+          "id": "d03-wg-dns",
+          "tree": "wargames",
           "minutes": 30,
-          "title": "Trace retry and error paths in a model call",
-          "brief": "A scripted fake call_model raises a timeout, a 429, returns broken JSON, then a final answer. Trace call_with_retry() turn by turn and predict everything it prints before you run it. AI autocomplete off, docs allowed.",
-          "code": "import json\n\nclass RateLimited(Exception):\n    def __init__(self, retry_after):\n        super().__init__(f\"429, retry after {retry_after}s\")\n        self.retry_after = retry_after\n\nSCRIPT = [\n    TimeoutError(\"read timed out\"),\n    RateLimited(retry_after=5),\n    '{\"tool\": \"lookup\", \"args\": {\"id\": 7}',\n    '{\"final\": \"id 7 is active\"}',\n    TimeoutError(\"read timed out\"),\n    TimeoutError(\"read timed out\"),\n]\n\ndef call_model(prompt, _state={\"i\": 0}):\n    item = SCRIPT[_state[\"i\"]]\n    _state[\"i\"] += 1\n    if isinstance(item, Exception):\n        raise item\n    return item\n\nsleeps = []\n\ndef sleep(seconds):\n    sleeps.append(seconds)\n\ndef call_with_retry(prompt, max_attempts=4, base=1.0):\n    for attempt in range(max_attempts):\n        try:\n            reply = call_model(prompt)\n            return json.loads(reply)\n        except RateLimited as e:\n            delay = e.retry_after\n        except TimeoutError:\n            delay = base * 2 ** attempt\n        except json.JSONDecodeError as e:\n            return {\"error\": f\"bad JSON from model: {e.msg}\"}\n        sleep(delay)\n    raise RuntimeError(f\"gave up after {max_attempts} attempts\")\n\nprint(call_with_retry(\"status of 7?\"))\nprint(call_with_retry(\"again?\"))\nprint(sleeps)\nprint(call_with_retry(\"third?\", max_attempts=2))",
+          "title": "War-Game 3: the zone is associated, the name does not exist",
+          "brief": "A customer changed their VPC's DNS servers to their AD domain controllers yesterday. Today the agent cannot reach its database and they want you to hard-code the IP. Set a 20-minute timer. Evidence is in the code block. Today's intel card helps.",
+          "code": "# Customer: agent runs on EC2 (Ubuntu 24.04) in a VPC, CIDR 10.20.0.0/16.\n#           Postgres for the agent is in the same VPC. Two AD domain controllers\n#           run on EC2 in the VPC at 10.20.1.10 and 10.20.2.10.\n# Quote: \"Yesterday we pointed the VPC at our domain controllers so new boxes can join AD.\n#         This morning the agent can't find its database. Route 53 must be broken,\n#         the zone is right there and it's associated. Can you hard-code the IP?\"\n\n$ journalctl -u agent --since 06:00 --no-pager | tail -2\nNov 29 06:02:11 ip-10-20-4-23 agent[2211]: ERROR db connect failed: could not translate host name \"db.aws.corp.example\" to address: Name or service not known\nNov 29 06:02:13 ip-10-20-4-23 agent[2211]: ERROR retrying db connect (attempt 4/10)\n\n$ getent hosts db.aws.corp.example; echo \"exit=$?\"\nexit=2\n\n$ nc -zv -w 3 10.20.3.41 5432\nConnection to 10.20.3.41 5432 port [tcp/postgresql] succeeded!\n\n$ resolvectl status ens5 | grep -E 'DNS Servers|DNS Domain'\n       DNS Servers: 10.20.1.10 10.20.2.10\n        DNS Domain: corp.example\n\n$ aws ec2 describe-dhcp-options --dhcp-options-ids dopt-0c3e5f7a9b1d2e4f6 \\\n    --query 'DhcpOptions[0].DhcpConfigurations'\n[\n    {\"Key\": \"domain-name\", \"Values\": [{\"Value\": \"corp.example\"}]},\n    {\"Key\": \"domain-name-servers\", \"Values\": [{\"Value\": \"10.20.1.10\"}, {\"Value\": \"10.20.2.10\"}]}\n]\n\n$ aws route53 list-hosted-zones-by-vpc --vpc-id vpc-0a1b2c3d4e5f60718 \\\n    --vpc-region ap-southeast-2 --query 'HostedZoneSummaries[].Name'\n[\n    \"aws.corp.example.\"\n]\n\n$ aws ec2 describe-vpc-attribute --vpc-id vpc-0a1b2c3d4e5f60718 --attribute enableDnsSupport \\\n    --query 'EnableDnsSupport.Value'\ntrue\n\n$ dig @10.20.1.10 db.aws.corp.example +noall +comments +authority   # trimmed\n;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 50314\n;; flags: qr aa rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 1, ADDITIONAL: 1\n;; AUTHORITY SECTION:\ncorp.example.\t\t3600\tIN\tSOA\tdc01.corp.example. hostmaster.corp.example. 4123 900 600 86400 3600",
           "tasks": [
-            "Keep a table for each call_with_retry(): attempt, what call_model does, which except branch runs, delay, return or raise.",
-            "Write the 4 things the program prints (the last one is a traceback: name its exception and message).",
-            "Write the full contents of sleeps at the moment the program crashes.",
-            "Find the design flaw in the last loop iteration and the missing piece the intel card says every backoff needs. One sentence each.",
-            "Save it as trace02.py, run python3 trace02.py; echo $?, and compare with your table."
+            "Sort the evidence: which lines prove the network path is fine, and which prove the failure is name resolution?",
+            "Name the server that answered NXDOMAIN and explain, from the SOA line, why it answered with authority.",
+            "Write the 4-bullet RCA brief, one line each: [C] confirmed signal (facts only), [I] root-cause hypothesis, [?] the single highest-value verification command, [Fix] the minimal reversible remediation.",
+            "One line: why hard-coding 10.20.3.41 in the agent config is the wrong fix."
           ],
-          "done_condition": "Your written predictions for the 4 outputs match the real run, and the exit code is 1.",
+          "done_condition": "Four RCA bullets are written, [C] holds only facts from the evidence, [?] is one command, and [Fix] keeps AD join working.",
           "answer_key": [
-            "Call 1: attempt 0 TimeoutError, delay 1.0 (1.0 * 2**0). Attempt 1 RateLimited, delay 5 from retry_after. Attempt 2 gets '{\"tool\": ..., \"args\": {\"id\": 7}' with the closing brace missing; json.loads raises JSONDecodeError and the function returns the error dict without sleeping.",
-            "Real output, line 1: {'error': \"bad JSON from model: Expecting ',' delimiter\"}",
-            "Line 2: {'final': 'id 7 is active'} - the mutable default _state={'i': 0} persists across calls, so the second call reads SCRIPT[3].",
-            "Line 3: [1.0, 5]",
-            "Line 4: Traceback ending RuntimeError: gave up after 2 attempts. Exit code 1.",
-            "sleeps at the crash is [1.0, 5, 1.0, 2.0] (checked by catching the RuntimeError in a copy). attempt resets per call, so the third call backs off 1.0 then 2.0.",
-            "Flaw: the loop sleeps 2.0s after the final failed attempt and then gives up anyway; that last sleep is wasted. Missing: jitter, so every client that failed together retries together. Also no cap on delay, and a RateLimited retry_after is trusted blindly.",
-            "Good part to keep: JSONDecodeError is not retried with the same request. It is returned as an error the model can act on."
+            "Network is fine: nc to 10.20.3.41:5432 succeeds. Resolution is the failure: libpq 'could not translate host name', and getent exit 2 (key not found).",
+            "dc01 (10.20.1.10) answered NXDOMAIN with the aa flag because it is authoritative for corp.example (the SOA in the authority section). aws.corp.example is a subdomain it does not delegate or forward, so it says the name does not exist.",
+            "[C] Since the DHCP option set change, the instance resolves through 10.20.1.10/10.20.2.10. The DC answers NXDOMAIN, authoritatively, for db.aws.corp.example. The private hosted zone aws.corp.example is associated with the VPC and enableDnsSupport is true. The database is reachable by IP.",
+            "[I] Private hosted zone records are answered by the Amazon-provided DNS server (VPC base + 2 = 10.20.0.2). The DCs are now the instances' resolvers and do not forward aws.corp.example there, so the private zone is never consulted.",
+            "[?] dig @10.20.0.2 db.aws.corp.example +short from the agent host. An answer of 10.20.3.41 confirms the zone is fine and the forwarding path is missing. (Also confirm enableDnsHostnames is true; the evidence only shows enableDnsSupport.)",
+            "[Fix] On the DCs, add a conditional forwarder for aws.corp.example pointing at 10.20.0.2, which is what the Route 53 docs require for custom DNS servers. It keeps AD join working and is reversible by deleting the forwarder. Reverting the DHCP option set also fixes the agent but breaks the customer's AD join.",
+            "Hard-coding the IP hides the defect: every other private-zone name in the VPC is broken too, and the IP silently goes stale on the next database failover or replacement.",
+            "Bonus smell: the agent retries a resolution failure 10 times. NXDOMAIN from an authoritative server will not fix itself in seconds."
           ]
         }
       ]
@@ -95,47 +97,49 @@
       "minutes": 90,
       "xp": 325,
       "tree_xp": {
-        "python": 150,
-        "aws": 90,
-        "wargames": 85
+        "python": 90,
+        "aws": 125,
+        "wargames": 110
       },
       "quests": [
         {
-          "id": "d02-aws-resilient",
+          "id": "d03-py-trace",
+          "tree": "python",
+          "minutes": 25,
+          "title": "Trace tool dispatch and the stop condition",
+          "brief": "A scripted fake call_model replays five replies: good tool call, bad arguments, unknown tool, good call, final answer. Trace run() by hand and predict every line before you run it. AI autocomplete off, docs allowed.",
+          "code": "import json\n\ndef get_weather(city):\n    return {\"city\": city, \"temp_c\": 31}\n\ndef add(a, b):\n    return a + b\n\nTOOLS = {\"get_weather\": get_weather, \"add\": add}\n\nREPLIES = [\n    '{\"tool\": \"get_weather\", \"args\": {\"city\": \"Perth\"}}',\n    '{\"tool\": \"add\", \"args\": {\"a\": 2, \"c\": 3}}',\n    '{\"tool\": \"search\", \"args\": {\"q\": \"dns\"}}',\n    '{\"tool\": \"add\", \"args\": {\"a\": 2, \"b\": 3}}',\n    '{\"final\": \"Perth is 31C and 2 + 3 = 5\"}',\n]\n\ndef call_model(messages):\n    turns_so_far = sum(1 for m in messages if m[\"role\"] == \"assistant\")\n    return REPLIES[turns_so_far]\n\ndef run(task, max_turns=4):\n    messages = [{\"role\": \"user\", \"content\": task}]\n    for turn in range(1, max_turns + 1):\n        reply = json.loads(call_model(messages))\n        messages.append({\"role\": \"assistant\", \"content\": reply})\n        if \"final\" in reply:\n            return f\"done in {turn}: {reply['final']}\"\n        fn = TOOLS.get(reply[\"tool\"])\n        if fn is None:\n            result = {\"error\": f\"unknown tool {reply['tool']}\"}\n        else:\n            try:\n                result = fn(**reply[\"args\"])\n            except TypeError as e:\n                result = {\"error\": str(e)}\n        print(turn, reply[\"tool\"], \"->\", result)\n        messages.append({\"role\": \"tool\", \"content\": result})\n    return f\"stopped: turn cap {max_turns}\"\n\nprint(run(\"weather and sum\"))\nprint(run(\"weather and sum\", max_turns=5))",
+          "tasks": [
+            "Keep a table for the first run(): turn, the reply, which branch runs (final / unknown tool / TypeError / success), and what is appended to messages.",
+            "Write the exact output of the whole program (10 lines).",
+            "Explain in one line why the second run() replays the same replies from the start, unlike yesterday's mutable-default call_model.",
+            "Predict what happens if the third reply is changed to '{\"tool\": \"add\", \"argz\": {\"q\": \"dns\"}}'. Name the exception and the line that raises it.",
+            "Name the line that is the stop condition and the line that is the turn cap. One sentence: which one would catch a model that never says final?",
+            "Save it as trace03.py, run python3 trace03.py; echo $?, and compare with your table."
+          ],
+          "done_condition": "Your written 10-line output matches the real run exactly and the exit code is 0.",
+          "answer_key": [
+            "Real output (Python 3.13, exit code 0), run 1: '1 get_weather -> {'city': 'Perth', 'temp_c': 31}' / '2 add -> {'error': \"add() got an unexpected keyword argument 'c'\"}' / '3 search -> {'error': 'unknown tool search'}' / '4 add -> 5' / 'stopped: turn cap 4'.",
+            "Run 2 (max_turns=5): the same four tool lines again, then 'done in 5: Perth is 31C and 2 + 3 = 5'.",
+            "Bad args and unknown tools do not crash the loop: they become error results appended as a tool message, so the model can correct itself. That is the pattern the raid boss needs.",
+            "call_model picks the reply by counting assistant messages, and each run() starts with a fresh messages list, so the count restarts at 0. No hidden state survives between calls.",
+            "With 'argz' (run, exit code 1): turns 1 and 2 print as before, then reply['args'] raises KeyError: 'args' on the line result = fn(**reply['args']). It is outside the try, and the try only catches TypeError, so the program crashes. Tool-arg validation is Day 8's fill-in.",
+            "Stop condition: if \"final\" in reply. Turn cap: for turn in range(1, max_turns + 1) and the return after the loop. Only the turn cap catches a model that never says final.",
+            "Note: with max_turns=4 the final answer is never read, even though the model would have given it on turn 5. A cap that is too tight looks like a failed agent."
+          ]
+        },
+        {
+          "id": "d03-aws-secure",
           "tree": "aws",
           "minutes": 20,
-          "title": "Tutorials Dojo: 10 questions on Design Resilient Architectures",
-          "brief": "Today's target is your weakest domain. If you did yesterday's diagnostic, use the weakest domain it showed. If not, take Design Resilient Architectures, which pairs with today's retry theme (decoupling, queues, Multi-AZ).",
+          "title": "Tutorials Dojo: 10 questions on Design Secure Architectures",
+          "brief": "Day 3 targets your second-weakest domain. No check-in has given a score yet, so take Design Secure Architectures, the biggest domain on SAA-C03. If you know your diagnostic result, use your second-weakest domain instead.",
           "tasks": [
             "In your Tutorials Dojo SAA-C03 portal, open the domain or topic quiz for your chosen domain and answer 10 questions without looking anything up.",
             "For each miss, write one line: why the distractor looked right to you.",
             "Type your score (x/10) and the missed topics into the check-in's TD fields."
           ],
           "done_condition": "The check-in has a score out of 10 and one written line for every miss."
-        },
-        {
-          "id": "d02-wg-tls-proxy",
-          "tree": "wargames",
-          "minutes": 25,
-          "title": "War-Game 2: curl works, Python does not",
-          "brief": "A customer's agent container cannot reach the model API. Curl on the host is fine, so they blame your code and ask you to ship verify=False. Set a 15-minute timer. Evidence is in the code block.",
-          "code": "# Customer: agent container on an Ubuntu 24.04 VM, egress through the corporate proxy.\n# Quote: \"Curl works fine from the box, so it's your code. Can you just ship verify=False?\n#         We're behind our own firewall anyway.\"\n\n$ podman exec agent env | grep -i proxy\nHTTPS_PROXY=http://proxy.corp.example:3128\nNO_PROXY=localhost,127.0.0.1,.internal\n\n$ podman logs --tail 3 agent\nINFO  health check http://inventory.internal/health -> 200\nERROR model call failed: requests.exceptions.SSLError: HTTPSConnectionPool(host='api.vendor.example', port=443): Max retries exceeded with url: /v1/chat (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1006)')))\nERROR retrying in 2.0s (attempt 2/5)\n\n# On the VM host (not in the container):\n$ curl -sv -o /dev/null https://api.vendor.example/v1/models 2>&1 | grep -E 'proxy|issuer|verify'\n* Uses proxy env variable HTTPS_PROXY == 'http://proxy.corp.example:3128'\n*  issuer: CN=Example Corp TLS Inspection CA\n*  SSL certificate verify ok.\n\n$ podman exec agent python3 -c 'import certifi; print(certifi.where())'\n/usr/local/lib/python3.12/site-packages/certifi/cacert.pem",
-          "tasks": [
-            "Write the 4-bullet RCA brief, one line each:",
-            "[C] Confirmed signal. Facts only, no guesses.",
-            "[I] Root-cause hypothesis.",
-            "[?] The single highest-value command to verify it.",
-            "[Fix] The minimal reversible remediation, plus one line on why verify=False is not it."
-          ],
-          "done_condition": "Four bullets are written, [C] contains only facts from the evidence, and [?] is a single command.",
-          "answer_key": [
-            "[C] From inside the container, HTTPS to api.vendor.example fails certificate verification (unable to get local issuer certificate). From the host, the same API through the same proxy verifies, and the presented issuer is 'Example Corp TLS Inspection CA'. The internal health check is plain HTTP and bypasses the proxy via NO_PROXY, so it proves nothing about TLS.",
-            "[I] The proxy intercepts TLS and re-signs with the corporate CA. The host trusts that CA in its system store; requests in the container uses certifi's bundled cacert.pem, which does not contain it.",
-            "[?] podman exec agent python3 -c \"import requests; requests.get('https://api.vendor.example/v1/models', verify='/etc/ssl/certs/ca-certificates.crt')\" after placing the corporate CA in the container's system store. Success there, while the default call fails, confirms it. (An equally good answer: grep the CA name in certifi's cacert.pem and get no match.)",
-            "[Fix] Add the corporate CA to the image (copy the .crt to /usr/local/share/ca-certificates/ and run update-ca-certificates), then set REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt. Reversible by unsetting the variable.",
-            "verify=False disables certificate checking for every host, so anything on the path can impersonate the API and read the prompts and API key. It also hides the real cause from the next engineer.",
-            "The retry line is a smell too: a certificate failure is not transient, so retrying it 5 times only adds delay."
-          ]
         }
       ]
     }

@@ -56,6 +56,16 @@
       "due_date": "2026-12-01",
       "q": "A request passes through 5 layers and every layer makes up to 3 attempts on failure. Worst case, how many calls reach the bottom layer, and what two changes stop it?",
       "a": "3^5 = 243. Do not retry at every layer (retry in one place), and cap attempts with exponential backoff plus jitter."
+    },
+    {
+      "id": "intel-2026-11-29",
+      "tree": "aws",
+      "source": "intel",
+      "created": "2026-11-29",
+      "interval_days": 3,
+      "due_date": "2026-12-02",
+      "q": "EC2 instances in a VPC use custom DNS servers (set in the DHCP option set). A private hosted zone associated with that VPC returns NXDOMAIN. What must the custom DNS servers do, and which two VPC attributes must be true?",
+      "a": "Forward queries for the private zone to the Amazon-provided DNS server at the VPC CIDR base plus two (10.20.0.2 for 10.20.0.0/16). enableDnsHostnames and enableDnsSupport must both be true."
     }
   ]
 }

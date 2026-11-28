@@ -1,0 +1,143 @@
+{
+  "schema": 1,
+  "date": "2026-11-28",
+  "day": 2,
+  "phase": "trace",
+  "headline": {
+    "quick": "Trace a 19-line retry loop: what prints, and when does it give up?",
+    "dungeon": "Trace retry and error paths, a 10-q Resilient quiz, and a proxy that breaks TLS"
+  },
+  "intel": {
+    "title": "Retries are selfish: back off, add jitter, cap them",
+    "bullets": [
+      "A retry spends the server's capacity to improve your own odds. When the failure is overload, retries make it worse.",
+      "Use exponential backoff, and cap both the backoff delay and the number of attempts.",
+      "Add jitter (randomness) to the delay, or every client that failed together retries together and collides again.",
+      "Retries at each layer multiply: 3 attempts per layer across 5 layers is 3^5 = 243x load at the bottom.",
+      "Do not retry client errors with the same request, and do not retry side-effecting calls unless the API is idempotent."
+    ],
+    "source": {
+      "title": "Amazon Builders' Library: Timeouts, retries, and backoff with jitter",
+      "url": "https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter"
+    },
+    "why": "Retry with backoff is your Day 6 fill-in and part of the raid boss, and a retry storm is the first thing to rule out when a flaky downstream API takes a customer down.",
+    "question": {
+      "id": "intel-2026-11-28",
+      "q": "A request passes through 5 layers and every layer makes up to 3 attempts on failure. Worst case, how many calls reach the bottom layer, and what two changes stop it?",
+      "a": "3^5 = 243. Do not retry at every layer (retry in one place), and cap attempts with exponential backoff plus jitter."
+    }
+  },
+  "tiers": {
+    "quick": {
+      "minutes": 15,
+      "xp": 50,
+      "tree_xp": {
+        "python": 50
+      },
+      "quests": [
+        {
+          "id": "d02-py-micro",
+          "tree": "python",
+          "minutes": 9,
+          "title": "Micro-drill: trace a retry loop by hand",
+          "brief": "No running code, no AI. Read the 19 lines and predict the output. Paper or the reMarkable is fine.",
+          "code": "calls = []\n\ndef flaky(n):\n    calls.append(n)\n    if len(calls) < 3:\n        raise TimeoutError(\"slow\")\n    return \"ok\"\n\ndef retry(fn, arg, attempts=3):\n    for i in range(attempts):\n        try:\n            return fn(arg)\n        except TimeoutError as e:\n            last = e\n            print(\"retry\", i)\n    raise last\n\nprint(retry(flaky, 7))\nprint(len(calls))",
+          "tasks": [
+            "Write the exact lines the program prints, in order.",
+            "Write what happens instead if the default is attempts=2.",
+            "Write what happens instead if flaky() raises ValueError rather than TimeoutError."
+          ],
+          "done_condition": "You have three written predictions and all three match the answer key.",
+          "answer_key": [
+            "As written (run, exit code 0): retry 0 / retry 1 / ok / 3. Calls 1 and 2 time out, call 3 succeeds, and calls holds three items.",
+            "attempts=2 (run, exit code 1): prints retry 0 and retry 1, then 'raise last' re-raises the second TimeoutError: slow. Nothing else prints.",
+            "ValueError (run, exit code 1): the except clause only catches TimeoutError, so the first ValueError escapes immediately. No 'retry' line prints. That is the point: only retry errors you know are transient."
+          ]
+        }
+      ]
+    },
+    "standard": {
+      "minutes": 45,
+      "xp": 150,
+      "tree_xp": {
+        "python": 150
+      },
+      "quests": [
+        {
+          "id": "d02-py-trace",
+          "tree": "python",
+          "minutes": 30,
+          "title": "Trace retry and error paths in a model call",
+          "brief": "A scripted fake call_model raises a timeout, a 429, returns broken JSON, then a final answer. Trace call_with_retry() turn by turn and predict everything it prints before you run it. AI autocomplete off, docs allowed.",
+          "code": "import json\n\nclass RateLimited(Exception):\n    def __init__(self, retry_after):\n        super().__init__(f\"429, retry after {retry_after}s\")\n        self.retry_after = retry_after\n\nSCRIPT = [\n    TimeoutError(\"read timed out\"),\n    RateLimited(retry_after=5),\n    '{\"tool\": \"lookup\", \"args\": {\"id\": 7}',\n    '{\"final\": \"id 7 is active\"}',\n    TimeoutError(\"read timed out\"),\n    TimeoutError(\"read timed out\"),\n]\n\ndef call_model(prompt, _state={\"i\": 0}):\n    item = SCRIPT[_state[\"i\"]]\n    _state[\"i\"] += 1\n    if isinstance(item, Exception):\n        raise item\n    return item\n\nsleeps = []\n\ndef sleep(seconds):\n    sleeps.append(seconds)\n\ndef call_with_retry(prompt, max_attempts=4, base=1.0):\n    for attempt in range(max_attempts):\n        try:\n            reply = call_model(prompt)\n            return json.loads(reply)\n        except RateLimited as e:\n            delay = e.retry_after\n        except TimeoutError:\n            delay = base * 2 ** attempt\n        except json.JSONDecodeError as e:\n            return {\"error\": f\"bad JSON from model: {e.msg}\"}\n        sleep(delay)\n    raise RuntimeError(f\"gave up after {max_attempts} attempts\")\n\nprint(call_with_retry(\"status of 7?\"))\nprint(call_with_retry(\"again?\"))\nprint(sleeps)\nprint(call_with_retry(\"third?\", max_attempts=2))",
+          "tasks": [
+            "Keep a table for each call_with_retry(): attempt, what call_model does, which except branch runs, delay, return or raise.",
+            "Write the 4 things the program prints (the last one is a traceback: name its exception and message).",
+            "Write the full contents of sleeps at the moment the program crashes.",
+            "Find the design flaw in the last loop iteration and the missing piece the intel card says every backoff needs. One sentence each.",
+            "Save it as trace02.py, run python3 trace02.py; echo $?, and compare with your table."
+          ],
+          "done_condition": "Your written predictions for the 4 outputs match the real run, and the exit code is 1.",
+          "answer_key": [
+            "Call 1: attempt 0 TimeoutError, delay 1.0 (1.0 * 2**0). Attempt 1 RateLimited, delay 5 from retry_after. Attempt 2 gets '{\"tool\": ..., \"args\": {\"id\": 7}' with the closing brace missing; json.loads raises JSONDecodeError and the function returns the error dict without sleeping.",
+            "Real output, line 1: {'error': \"bad JSON from model: Expecting ',' delimiter\"}",
+            "Line 2: {'final': 'id 7 is active'} - the mutable default _state={'i': 0} persists across calls, so the second call reads SCRIPT[3].",
+            "Line 3: [1.0, 5]",
+            "Line 4: Traceback ending RuntimeError: gave up after 2 attempts. Exit code 1.",
+            "sleeps at the crash is [1.0, 5, 1.0, 2.0] (checked by catching the RuntimeError in a copy). attempt resets per call, so the third call backs off 1.0 then 2.0.",
+            "Flaw: the loop sleeps 2.0s after the final failed attempt and then gives up anyway; that last sleep is wasted. Missing: jitter, so every client that failed together retries together. Also no cap on delay, and a RateLimited retry_after is trusted blindly.",
+            "Good part to keep: JSONDecodeError is not retried with the same request. It is returned as an error the model can act on."
+          ]
+        }
+      ]
+    },
+    "double": {
+      "minutes": 90,
+      "xp": 325,
+      "tree_xp": {
+        "python": 150,
+        "aws": 90,
+        "wargames": 85
+      },
+      "quests": [
+        {
+          "id": "d02-aws-resilient",
+          "tree": "aws",
+          "minutes": 20,
+          "title": "Tutorials Dojo: 10 questions on Design Resilient Architectures",
+          "brief": "Today's target is your weakest domain. If you did yesterday's diagnostic, use the weakest domain it showed. If not, take Design Resilient Architectures, which pairs with today's retry theme (decoupling, queues, Multi-AZ).",
+          "tasks": [
+            "In your Tutorials Dojo SAA-C03 portal, open the domain or topic quiz for your chosen domain and answer 10 questions without looking anything up.",
+            "For each miss, write one line: why the distractor looked right to you.",
+            "Type your score (x/10) and the missed topics into the check-in's TD fields."
+          ],
+          "done_condition": "The check-in has a score out of 10 and one written line for every miss."
+        },
+        {
+          "id": "d02-wg-tls-proxy",
+          "tree": "wargames",
+          "minutes": 25,
+          "title": "War-Game 2: curl works, Python does not",
+          "brief": "A customer's agent container cannot reach the model API. Curl on the host is fine, so they blame your code and ask you to ship verify=False. Set a 15-minute timer. Evidence is in the code block.",
+          "code": "# Customer: agent container on an Ubuntu 24.04 VM, egress through the corporate proxy.\n# Quote: \"Curl works fine from the box, so it's your code. Can you just ship verify=False?\n#         We're behind our own firewall anyway.\"\n\n$ podman exec agent env | grep -i proxy\nHTTPS_PROXY=http://proxy.corp.example:3128\nNO_PROXY=localhost,127.0.0.1,.internal\n\n$ podman logs --tail 3 agent\nINFO  health check http://inventory.internal/health -> 200\nERROR model call failed: requests.exceptions.SSLError: HTTPSConnectionPool(host='api.vendor.example', port=443): Max retries exceeded with url: /v1/chat (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1006)')))\nERROR retrying in 2.0s (attempt 2/5)\n\n# On the VM host (not in the container):\n$ curl -sv -o /dev/null https://api.vendor.example/v1/models 2>&1 | grep -E 'proxy|issuer|verify'\n* Uses proxy env variable HTTPS_PROXY == 'http://proxy.corp.example:3128'\n*  issuer: CN=Example Corp TLS Inspection CA\n*  SSL certificate verify ok.\n\n$ podman exec agent python3 -c 'import certifi; print(certifi.where())'\n/usr/local/lib/python3.12/site-packages/certifi/cacert.pem",
+          "tasks": [
+            "Write the 4-bullet RCA brief, one line each:",
+            "[C] Confirmed signal. Facts only, no guesses.",
+            "[I] Root-cause hypothesis.",
+            "[?] The single highest-value command to verify it.",
+            "[Fix] The minimal reversible remediation, plus one line on why verify=False is not it."
+          ],
+          "done_condition": "Four bullets are written, [C] contains only facts from the evidence, and [?] is a single command.",
+          "answer_key": [
+            "[C] From inside the container, HTTPS to api.vendor.example fails certificate verification (unable to get local issuer certificate). From the host, the same API through the same proxy verifies, and the presented issuer is 'Example Corp TLS Inspection CA'. The internal health check is plain HTTP and bypasses the proxy via NO_PROXY, so it proves nothing about TLS.",
+            "[I] The proxy intercepts TLS and re-signs with the corporate CA. The host trusts that CA in its system store; requests in the container uses certifi's bundled cacert.pem, which does not contain it.",
+            "[?] podman exec agent python3 -c \"import requests; requests.get('https://api.vendor.example/v1/models', verify='/etc/ssl/certs/ca-certificates.crt')\" after placing the corporate CA in the container's system store. Success there, while the default call fails, confirms it. (An equally good answer: grep the CA name in certifi's cacert.pem and get no match.)",
+            "[Fix] Add the corporate CA to the image (copy the .crt to /usr/local/share/ca-certificates/ and run update-ca-certificates), then set REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt. Reversible by unsetting the variable.",
+            "verify=False disables certificate checking for every host, so anything on the path can impersonate the API and read the prompts and API key. It also hides the real cause from the next engineer.",
+            "The retry line is a smell too: a certificate failure is not transient, so retrying it 5 times only adds delay."
+          ]
+        }
+      ]
+    }
+  }
+}
